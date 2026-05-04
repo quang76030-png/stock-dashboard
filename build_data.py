@@ -2,73 +2,59 @@ import json
 import requests
 from datetime import datetime, timezone, timedelta
 
-def fetch_all_stocks_tcbs():
-    print(f"Bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+def fetch_all_stocks():
+    print("Bắt đầu lấy dữ liệu toàn thị trường...")
     
-    # 1. Lấy danh sách tất cả mã cổ phiếu từ TCBS
+    # 1. Lấy danh sách tất cả mã
     url_list = "https://apipubaws.tcbs.com.vn/tcanalysis/v1/company/live"
     headers = {"User-Agent": "Mozilla/5.0"}
-    
     try:
-        response = requests.get(url_list, headers=headers, timeout=30)
-        data = response.json()
-        # Dữ liệu trả về là list các object, mỗi object có key "ticker"
-        tickers = [item["ticker"] for item in data if "ticker" in item]
-        print(f"Tổng số mã lấy được: {len(tickers)}")
+        resp = requests.get(url_list, headers=headers, timeout=30)
+        data = resp.json()
+        all_tickers = [item["ticker"] for item in data if "ticker" in item]
+        print(f"Tổng số mã tìm thấy: {len(all_tickers)}")
     except Exception as e:
-        print(f"Lỗi lấy danh sách mã: {e}")
+        print(f"Lỗi lấy danh sách: {e}")
         return []
     
-    # 2. Lấy giá hiện tại cho từng mã (giá tham chiếu cuối ngày)
+    # 2. Lấy batch dữ liệu giá (mỗi lần 100 mã)
+    batch_size = 100
     result = []
     now = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M:%S")
     
-    # Giới hạn số lượng để tránh timeout (có thể lấy 50-100 mã đầu, hoặc toàn bộ nhưng chậm)
-    # Bạn có thể lấy toàn bộ nhưng sẽ mất vài phút
-    # Ở đây mình lấy 100 mã đầu để test. Sau khi chạy ok, bạn sửa thành tickers (toàn bộ)
-    tickers_limit = tickers[:100]  # 👈 SỬA LẠI THÀNH tickers NẾU MUỐN LẤY TẤT CẢ
-    
-    for idx, ticker in enumerate(tickers_limit, 1):
+    for i in range(0, len(all_tickers), batch_size):
+        batch = all_tickers[i:i+batch_size]
+        tickers_param = ",".join(batch)
+        url_batch = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/stock/batch?ticker={tickers_param}"
         try:
-            url_price = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/stock/{ticker}/yearly"
-            res = requests.get(url_price, headers=headers, timeout=10)
-            if res.status_code != 200:
-                print(f"[{idx}/{len(tickers_limit)}] {ticker}: Không có dữ liệu")
-                continue
-            data_price = res.json()
-            if not data_price or len(data_price) < 2:
-                print(f"[{idx}/{len(tickers_limit)}] {ticker}: Không đủ dữ liệu")
-                continue
-            
-            # Lấy giá đóng cửa ngày gần nhất và ngày trước đó
-            latest = data_price[-1]
-            prev = data_price[-2]
-            price = latest.get("close", 0)
-            prev_close = prev.get("close", 0)
-            if prev_close == 0:
-                continue
-            change = price - prev_close
-            change_percent = (change / prev_close) * 100
-            volume = latest.get("volume", 0)
-            
-            result.append({
-                "ticker": ticker,
-                "price": round(price, 2),
-                "change": round(change, 2),
-                "changePercent": round(change_percent, 2),
-                "volume": volume,
-                "lastUpdate": now
-            })
-            print(f"[{idx}/{len(tickers_limit)}] ✓ {ticker}: {price} ({change_percent:+.2f}%)")
+            resp_batch = requests.get(url_batch, headers=headers, timeout=30)
+            batch_data = resp_batch.json()
+            for stock in batch_data:
+                ticker = stock.get("ticker")
+                price = stock.get("close", 0)
+                if price == 0:
+                    continue
+                change = stock.get("change", 0)
+                change_percent = stock.get("changePercent", 0)
+                volume = stock.get("volume", 0)
+                result.append({
+                    "ticker": ticker,
+                    "price": round(price, 2),
+                    "change": round(change, 2),
+                    "changePercent": round(change_percent, 2),
+                    "volume": volume,
+                    "lastUpdate": now
+                })
+            print(f"Batch {i//batch_size + 1}/{(len(all_tickers)-1)//batch_size + 1} thành công, tổng: {len(result)}")
         except Exception as e:
-            print(f"[{idx}/{len(tickers_limit)}] ✗ {ticker}: {str(e)[:50]}")
+            print(f"Lỗi batch {i//batch_size + 1}: {e}")
             continue
     
-    print(f"Hoàn tất. Đã lấy thành công {len(result)}/{len(tickers_limit)} mã.")
+    print(f"Hoàn tất. Lấy thành công {len(result)}/{len(all_tickers)} mã.")
     return result
 
 if __name__ == "__main__":
-    data = fetch_all_stocks_tcbs()
+    data = fetch_all_stocks()
     with open("market_data.json", "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
-    print("Đã lưu vào market_data.json")
+    print("Đã lưu market_data.json")
