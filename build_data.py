@@ -1,7 +1,7 @@
 import json
 import time
 from datetime import datetime, timezone, timedelta
-from vnstock import *
+from vnstock import listing, stock_historical_data
 
 def fetch_all_stocks():
     print(f"Bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -15,13 +15,8 @@ def fetch_all_stocks():
     result = []
     now = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d %H:%M:%S")
     
-    # 2. Lấy dữ liệu giá cho từng mã (có thể giới hạn số lượng nếu muốn)
-    # Nếu bạn muốn giới hạn chỉ lấy top N mã, sửa dòng dưới
-    # tickers = tickers[:100]  # ví dụ chỉ lấy 100 mã đầu
-    
     for idx, ticker in enumerate(tickers, 1):
         try:
-            # Lấy dữ liệu lịch sử 5 ngày gần nhất (để tính thay đổi)
             df = stock_historical_data(
                 symbol=ticker,
                 start_date=(datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"),
@@ -31,7 +26,6 @@ def fetch_all_stocks():
                 print(f"[{idx}/{len(tickers)}] {ticker}: Không đủ dữ liệu")
                 continue
             
-            # Dữ liệu mới nhất và ngày trước đó
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             price = latest['close']
@@ -47,12 +41,9 @@ def fetch_all_stocks():
                 "lastUpdate": now
             })
             print(f"[{idx}/{len(tickers)}] ✓ {ticker}: {price} ({change_percent:+.2f}%)")
-            
-            # Chờ 0.2 giây để tránh quá tải API (20 requests/giây là an toàn)
             time.sleep(0.2)
-            
         except Exception as e:
-            print(f"[{idx}/{len(tickers)}] ✗ {ticker}: Lỗi - {str(e)[:50]}")
+            print(f"[{idx}/{len(tickers)}] ✗ {ticker}: {str(e)[:50]}")
             continue
     
     print(f"Hoàn tất. Đã lấy thành công {len(result)}/{len(tickers)} mã.")
