@@ -78,7 +78,7 @@ def main():
     print(f"Tổng số mã: {len(stocks_info)}")
     
     # Giới hạn để test nhanh: lấy 50 mã đầu thôi. Sau đó có thể bỏ comment để lấy tất cả
-    stocks_info = stocks_info 👈 Bạn có thể bỏ comment này để test
+    stocks_info = stocks_info 
     
     results = []
     for idx, stock in enumerate(stocks_info, 1):
