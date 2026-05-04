@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone, timedelta
 import os
 
-# Hàm lấy danh sách mã và ngành (từ TCBS)
+# Hàm lấy danh sách mã và ngành (từ Fire ant)
 def get_all_tickers_and_sector():
     url_list = "https://apipubaws.tcbs.com.vn/tcanalysis/v1/company/live"
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -78,7 +78,7 @@ def main():
     print(f"Tổng số mã: {len(stocks_info)}")
     
     # Giới hạn để test nhanh: lấy 50 mã đầu thôi. Sau đó có thể bỏ comment để lấy tất cả
-    # stocks_info = stocks_info[:50]  # 👈 Bạn có thể bỏ comment này để test
+    stocks_info = stocks_info 👈 Bạn có thể bỏ comment này để test
     
     results = []
     for idx, stock in enumerate(stocks_info, 1):
