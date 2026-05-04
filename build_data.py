@@ -1,14 +1,17 @@
 import json
 import time
 from datetime import datetime, timezone, timedelta
-from vnstock import listing, stock_historical_data
+from vnstock import Vnstock
 
 def fetch_all_stocks():
     print(f"Bắt đầu: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # 1. Lấy danh sách tất cả mã cổ phiếu
+    # Khởi tạo đối tượng Vnstock
+    stock = Vnstock().stock()
+    
+    # Lấy danh sách tất cả mã cổ phiếu
     print("Đang tải danh sách mã...")
-    all_symbols_df = listing.all_symbols()
+    all_symbols_df = stock.listing.all_symbols()
     tickers = all_symbols_df['ticker'].tolist()
     print(f"Tổng số mã: {len(tickers)}")
     
@@ -17,7 +20,8 @@ def fetch_all_stocks():
     
     for idx, ticker in enumerate(tickers, 1):
         try:
-            df = stock_historical_data(
+            # Lấy dữ liệu lịch sử 10 ngày gần nhất
+            df = stock.historical.data(
                 symbol=ticker,
                 start_date=(datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"),
                 end_date=datetime.now().strftime("%Y-%m-%d")
