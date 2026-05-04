@@ -1,1 +1,16 @@
-[{"ticker":"VNINDEX","price":1280.50,"change":0,"changePercent":0,"volume":0,"lastUpdate":"Đang chờ cập nhật"}]
+[
+  {
+    "ticker": "VNINDEX",
+    "price": 1280.5,
+    "change_1d": 0,
+    "change_1d_pct": 0.0,
+    "change_5d": 0,
+    "change_20d": 0,
+    "volume": 0,
+    "rsi": 50,
+    "ma20_price": 1280.5,
+    "volume_ratio": 100,
+    "sector": "Chỉ số",
+    "lastUpdate": "2026-05-04 21:24:08"
+  }
+]
