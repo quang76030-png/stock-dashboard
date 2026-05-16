@@ -1,25 +1,546 @@
-name: Cập nhật dữ liệu chứng khoán
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Dashboard V3 - Phân tích thị trường</title>
+    <!-- Font Awesome 6 (free) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Google Font: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <!-- Chart.js 4.4 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-on:
-  schedule:
-    - cron: '35 8 * * 1-5'
-  workflow_dispatch:
+        :root {
+            --bg-body: #f4f7fc;
+            --card-bg: rgba(255, 255, 255, 0.85);
+            --card-border: rgba(0, 0, 0, 0.05);
+            --text-primary: #0a2540;
+            --text-secondary: #425466;
+            --primary: #0066ff;
+            --primary-light: #3385ff;
+            --success: #00c853;
+            --danger: #ff3b30;
+            --warning: #ff9f0a;
+            --shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.08);
+            --radius-xl: 28px;
+            --radius-lg: 20px;
+        }
 
-# 👇 THÊM 3 DÒNG NÀY ĐỂ CẤP QUYỀN GHI
-permissions:
-  contents: write
+        [data-theme="dark"] {
+            --bg-body: #0c111d;
+            --card-bg: rgba(18, 25, 45, 0.85);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-primary: #f0f3fa;
+            --text-secondary: #a0b3d9;
+            --primary: #3b82f6;
+            --shadow: 0 20px 35px -12px rgba(0, 0, 0, 0.4);
+        }
 
-jobs:
-  update:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install requests
-      - run: python build_data.py
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Tự động cập nhật dữ liệu cuối ngày"
-          file_pattern: market_data.json breadth.json
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-body);
+            color: var(--text-primary);
+            transition: background 0.25s ease, color 0.2s;
+            backdrop-filter: blur(0px);
+        }
+
+        /* Layout grid: 3 cột */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 270px 1fr 320px;
+            gap: 1rem;
+            padding: 1rem;
+            min-height: 100vh;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Glass morphism cards chung */
+        .glass-card {
+            background: var(--card-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        /* Sidebar trái */
+        .sidebar-left {
+            padding: 1.2rem 0.8rem;
+        }
+        .logo-area {
+            padding: 0 0.8rem 1.2rem 0.8rem;
+            border-bottom: 1px solid var(--card-border);
+            margin-bottom: 1.5rem;
+        }
+        .logo-area h2 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #0066ff, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .plan-switch {
+            display: flex;
+            gap: 12px;
+            margin: 0 0.8rem 1.5rem 0.8rem;
+            background: rgba(0,0,0,0.05);
+            border-radius: 60px;
+            padding: 4px;
+        }
+        .plan-option {
+            flex: 1;
+            text-align: center;
+            padding: 8px 0;
+            border-radius: 40px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .plan-option.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 10px rgba(0,102,255,0.3);
+        }
+        .search-box {
+            padding: 0 0.8rem;
+            margin-bottom: 1.5rem;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 40px;
+            border: 1px solid var(--card-border);
+            background: rgba(255,255,255,0.4);
+            color: var(--text-primary);
+            font-weight: 500;
+            outline: none;
+        }
+        .index-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding: 0 0.6rem;
+        }
+        .index-item {
+            padding: 12px 18px;
+            border-radius: 24px;
+            background: rgba(255,255,255,0.2);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .index-item:hover, .index-item.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary-light);
+            transform: translateX(5px);
+        }
+
+        /* Main content */
+        .main-area {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+        .header-info {
+            padding: 1.2rem 1.5rem;
+        }
+        .header-info h1 {
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+        }
+        .stat-card {
+            padding: 1.2rem;
+        }
+        .stat-card h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            opacity: 0.8;
+        }
+        .chart-container {
+            height: 200px;
+            margin-top: 12px;
+        }
+        .sector-heatmap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin: 12px 0;
+        }
+        .sector-tag {
+            flex: 1;
+            padding: 14px;
+            border-radius: 24px;
+            text-align: center;
+            font-weight: 700;
+            background: rgba(0,0,0,0.05);
+        }
+        .positive { background: rgba(0,200,83,0.2); color: #00a86b; }
+        .negative { background: rgba(255,59,48,0.15); color: #ff3b30; }
+
+        /* Right panel */
+        .right-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+        .info-block {
+            padding: 1.2rem;
+        }
+        .info-block h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .driver-list {
+            list-style: none;
+            margin-top: 8px;
+        }
+        .driver-list li {
+            padding: 8px 0;
+            border-bottom: 1px dashed var(--card-border);
+            display: flex;
+            justify-content: space-between;
+        }
+        .up { color: var(--success); font-weight: 700; }
+        .down { color: var(--danger); font-weight: 700; }
+        .foreign-net {
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 12px 0;
+        }
+
+        .theme-toggle {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border-radius: 60px;
+            width: 52px;
+            height: 52px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border: 1px solid var(--card-border);
+            z-index: 99;
+        }
+
+        @media (max-width: 1000px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+            .sidebar-left, .right-panel {
+                order: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="dashboard">
+    <!-- LEFT SIDEBAR -->
+    <div class="sidebar-left glass-card">
+        <div class="logo-area">
+            <h2><i class="fas fa-chart-line"></i> MKT Dashboard V3</h2>
+            <div style="font-size: 0.75rem; margin-top: 6px;">Phân tích toàn diện</div>
+        </div>
+        <div class="plan-switch" id="planSwitch">
+            <div class="plan-option" data-plan="free">Free</div>
+            <div class="plan-option active" data-plan="pro">Pro</div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="indexSearch" placeholder="Tìm chỉ số... VNINDEX, VN30" autocomplete="off">
+        </div>
+        <div class="index-list" id="indexList">
+            <div class="index-item active" data-index="vnindex">📊 VNINDEX</div>
+            <div class="index-item" data-index="vn30">🏦 VN30</div>
+            <div class="index-item" data-index="hnx">📉 HNX</div>
+            <div class="index-item" data-index="upcom">💎 UPCOM</div>
+        </div>
+        <div style="margin-top: 24px; padding: 0 12px; font-size: 0.7rem; opacity: 0.6;">
+            <i class="fas fa-sync-alt"></i> Cập nhật real-time 04/05/2026
+        </div>
+    </div>
+
+    <!-- MAIN CENTER -->
+    <div class="main-area">
+        <div class="header-info glass-card">
+            <h1 id="indexTitle">VNINDEX · Điểm số & Xu hướng</h1>
+            <p id="updateTime">⏱️ Phiên giao dịch: 14:45 - 04/05/2026</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card glass-card">
+                <h3><i class="fas fa-chart-simple"></i> Diễn biến giá</h3>
+                <div id="priceValue" style="font-size: 2rem; font-weight: 800;">1,280.15</div>
+                <div id="priceChange" class="up">▲ +12.4 (+0.98%)</div>
+                <div class="chart-container">
+                    <canvas id="priceCanvas" width="400" height="180" style="max-width:100%; height:180px"></canvas>
+                </div>
+            </div>
+            <div class="stat-card glass-card">
+                <h3><i class="fas fa-water"></i> Khối lượng giao dịch</h3>
+                <div id="volumeText" style="font-size: 1.4rem; font-weight: 700;">789.2 triệu CP</div>
+                <div class="chart-container">
+                    <canvas id="volumeCanvas" width="400" height="180"></canvas>
+                </div>
+            </div>
+            <div class="stat-card glass-card">
+                <h3><i class="fas fa-fire"></i> Heatmap ngành</h3>
+                <div class="sector-heatmap" id="sectorHeatmap">
+                    <div class="sector-tag positive">Ngân hàng +1.2%</div>
+                    <div class="sector-tag negative">BĐS -0.4%</div>
+                    <div class="sector-tag positive">Chứng khoán +2.1%</div>
+                    <div class="sector-tag positive">Bán lẻ +0.7%</div>
+                </div>
+                <div class="bond-note" style="margin-top: 12px;"><i class="fas fa-chart-line"></i> Trái phiếu: lợi suất 10Y 3.85%</div>
+                <canvas id="yieldCurveCanvas" height="100" style="margin-top: 12px;"></canvas>
+            </div>
+        </div>
+        <div class="glass-card" style="padding: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong><i class="fas fa-chart-column"></i> Tương quan chỉ số & khuyến nghị</strong>
+                <span class="badge" style="background: var(--primary-light); padding: 4px 12px; border-radius: 20px;">Khuyến nghị: Tích lũy</span>
+            </div>
+            <div style="margin-top: 12px; font-size: 0.9rem;">✅ VNINDEX vượt MA50, khối lượng cải thiện. Hỗ trợ 1,245 - kháng cự 1,320.</div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL: Drivers, ngoại tệ, tin nhanh -->
+    <div class="right-panel">
+        <div class="info-block glass-card">
+            <h3><i class="fas fa-car"></i> Chỉ số kéo/chìm</h3>
+            <div><strong>📈 Dẫn dắt tăng:</strong></div>
+            <ul class="driver-list" id="driverUpList">
+                <li>VCB <span class="up">+2.3%</span></li><li>FPT <span class="up">+3.1%</span></li><li>MWG <span class="up">+1.9%</span></li>
+            </ul>
+            <div style="margin-top: 8px;"><strong>📉 Kéo giảm:</strong></div>
+            <ul class="driver-list" id="driverDownList">
+                <li>VHM <span class="down">-1.2%</span></li><li>GAS <span class="down">-0.7%</span></li><li>VIC <span class="down">-0.5%</span></li>
+            </ul>
+        </div>
+        <div class="info-block glass-card">
+            <h3><i class="fas fa-globe"></i> Khối ngoại</h3>
+            <div class="foreign-net" id="foreignNet">+ 418.6 tỷ</div>
+            <div>Mua ròng: VCB, HPG, STB</div>
+            <div>Bán ròng: VNM, VRE</div>
+        </div>
+        <div class="info-block glass-card">
+            <h3><i class="fas fa-bell"></i> Điểm nhấn kỹ thuật</h3>
+            <div>🔹 RSI: 62 (vùng trung tính)</div>
+            <div>🔹 MACD cắt lên trên signal</div>
+            <div>🔹 Khối lượng trung bình 20 phiên tăng 15%</div>
+            <div style="margin-top: 12px;">🎯 Vùng mua tham khảo: 1,255-1,270</div>
+        </div>
+    </div>
+</div>
+<div class="theme-toggle" id="darkModeToggle">
+    🌙
+</div>
+
+<script>
+    // ---------- KHỞI TẠO DỮ LIỆU VÀ BIỂU ĐỒ ----------
+    let priceChart, volumeChart, yieldChart;
+    let currentIndex = 'vnindex';
+
+    // Hàm lấy dữ liệu giả lập theo chỉ số
+    function getMarketData(indexKey) {
+        const dataMap = {
+            vnindex: { price: 1280.15, change: '+12.4', changePercent: '+0.98%', volume: '789.2 triệu', trendUp: true, priceSeries: [1260,1272,1268,1275,1280,1285,1280], volSeries: [680,710,740,780,790,815,789] },
+            vn30: { price: 1523.50, change: '+18.2', changePercent: '+1.21%', volume: '421.3 triệu', trendUp: true, priceSeries: [1490,1505,1510,1518,1522,1525,1523], volSeries: [390,405,418,430,422,435,421] },
+            hnx: { price: 234.80, change: '-1.2', changePercent: '-0.51%', volume: '112.5 triệu', trendUp: false, priceSeries: [238,236,235,234.5,234,233,234.8], volSeries: [108,115,118,114,110,113,112] },
+            upcom: { price: 92.45, change: '+0.65', changePercent: '+0.71%', volume: '98.2 triệu', trendUp: true, priceSeries: [90.2,91.0,91.5,91.8,92.1,92.4,92.45], volSeries: [85,90,94,96,97,99,98] }
+        };
+        return dataMap[indexKey] || dataMap.vnindex;
+    }
+
+    // Cập nhật toàn bộ giao diện theo index
+    function updateDashboard(indexKey) {
+        currentIndex = indexKey;
+        const data = getMarketData(indexKey);
+        // Tiêu đề
+        let titleName = '';
+        if(indexKey === 'vnindex') titleName = 'VNINDEX';
+        else if(indexKey === 'vn30') titleName = 'VN30';
+        else if(indexKey === 'hnx') titleName = 'HNX';
+        else titleName = 'UPCOM';
+        document.getElementById('indexTitle').innerHTML = `${titleName} · Điểm số & Xu hướng`;
+        document.getElementById('priceValue').innerHTML = data.price.toFixed(2);
+        document.getElementById('priceChange').innerHTML = `${data.change} điểm (${data.changePercent})`;
+        document.getElementById('priceChange').className = data.trendUp ? 'up' : 'down';
+        document.getElementById('volumeText').innerHTML = `${data.volume} CP`;
+
+        // Drivers phù hợp với từng index
+        const upList = document.getElementById('driverUpList');
+        const downList = document.getElementById('driverDownList');
+        if(indexKey === 'vnindex') {
+            upList.innerHTML = '<li>VCB <span class="up">+2.3%</span></li><li>FPT <span class="up">+3.1%</span></li><li>MWG <span class="up">+1.9%</span></li>';
+            downList.innerHTML = '<li>VHM <span class="down">-1.2%</span></li><li>GAS <span class="down">-0.7%</span></li><li>VIC <span class="down">-0.5%</span></li>';
+        } else if(indexKey === 'vn30') {
+            upList.innerHTML = '<li>SSI <span class="up">+2.8%</span></li><li>TCB <span class="up">+2.1%</span></li><li>MBB <span class="up">+1.7%</span></li>';
+            downList.innerHTML = '<li>SAB <span class="down">-0.9%</span></li><li>VRE <span class="down">-0.6%</span></li><li>PNJ <span class="down">-0.3%</span></li>';
+        } else {
+            upList.innerHTML = '<li>CEO <span class="up">+4.5%</span></li><li>NVB <span class="up">+2.2%</span></li><li>SHB <span class="up">+1.5%</span></li>';
+            downList.innerHTML = '<li>BVS <span class="down">-1.3%</span></li><li>VCS <span class="down">-0.8%</span></li><li>ACB <span class="down">-0.2%</span></li>';
+        }
+
+        // Cập nhật khối ngoại giả lập (biến động)
+        const randomFlow = (Math.random() * 500 + 200).toFixed(1);
+        document.getElementById('foreignNet').innerHTML = `+ ${randomFlow} tỷ`;
+
+        // Cập nhật heatmap ngành (thay đổi nhẹ theo index)
+        const sectorDiv = document.getElementById('sectorHeatmap');
+        if(indexKey === 'vn30') {
+            sectorDiv.innerHTML = `<div class="sector-tag positive">Ngân hàng +1.5%</div>
+                                    <div class="sector-tag positive">Chứng khoán +2.3%</div>
+                                    <div class="sector-tag negative">BĐS -0.2%</div>
+                                    <div class="sector-tag positive">Bán lẻ +0.9%</div>`;
+        } else {
+            sectorDiv.innerHTML = `<div class="sector-tag positive">Ngân hàng +1.2%</div>
+                                    <div class="sector-tag negative">BĐS -0.4%</div>
+                                    <div class="sector-tag positive">Chứng khoán +2.1%</div>
+                                    <div class="sector-tag positive">Bán lẻ +0.7%</div>`;
+        }
+
+        // Cập nhật biểu đồ giá & khối lượng
+        updateCharts(data);
+    }
+
+    function updateCharts(data) {
+        const labels = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
+        const priceData = data.priceSeries;
+        const volData = data.volSeries;
+
+        // Destroy cũ nếu tồn tại
+        if(priceChart) priceChart.destroy();
+        if(volumeChart) volumeChart.destroy();
+
+        const ctxPrice = document.getElementById('priceCanvas').getContext('2d');
+        const ctxVol = document.getElementById('volumeCanvas').getContext('2d');
+
+        priceChart = new Chart(ctxPrice, {
+            type: 'line',
+            data: { labels, datasets: [{ label: 'Giá đóng cửa', data: priceData, borderColor: '#0066ff', backgroundColor: 'rgba(0,102,255,0.05)', borderWidth: 3, pointRadius: 3, fill: true, tension: 0.2 }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'top', labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') } } } }
+        });
+        volumeChart = new Chart(ctxVol, {
+            type: 'bar',
+            data: { labels, datasets: [{ label: 'KLGD (triệu cp)', data: volData, backgroundColor: volData.map(v => v > 700 ? '#00c853' : '#ff9f0a') }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: getComputedStyle(document.body).getPropertyValue('--text-primary') } } } }
+        });
+    }
+
+    function initYieldCurve() {
+        const ctx = document.getElementById('yieldCurveCanvas').getContext('2d');
+        if(yieldChart) yieldChart.destroy();
+        yieldChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: ['1Y', '2Y', '3Y', '5Y', '7Y', '10Y'], datasets: [{ label: 'Lợi suất TPCP', data: [2.9, 3.2, 3.5, 3.85, 4.1, 4.35], borderColor: '#8b5cf6', tension: 0.2, fill: false }] },
+            options: { responsive: true, maintainAspectRatio: true, plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.raw}%` } } } }
+        });
+    }
+
+    // Xử lý sự kiện click vào index
+    const indexItems = document.querySelectorAll('.index-item');
+    indexItems.forEach(item => {
+        item.addEventListener('click', function() {
+            indexItems.forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            const idx = this.getAttribute('data-index');
+            updateDashboard(idx);
+        });
+    });
+
+    // Search chỉ số
+    const searchInput = document.getElementById('indexSearch');
+    searchInput.addEventListener('input', function(e) {
+        const term = e.target.value.toLowerCase();
+        indexItems.forEach(item => {
+            const text = item.innerText.toLowerCase();
+            if(text.includes(term)) item.style.display = 'flex';
+            else item.style.display = 'none';
+        });
+    });
+
+    // Plan Switch (demo chỉ UI)
+    const planOptions = document.querySelectorAll('.plan-option');
+    planOptions.forEach(opt => {
+        opt.addEventListener('click', function() {
+            planOptions.forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+            // chỉ thông báo demo, không thay đổi logic lớn
+            const plan = this.getAttribute('data-plan');
+            if(plan === 'pro') {
+                // kích hoạt thêm hiệu ứng nhẹ
+                document.querySelectorAll('.stat-card').forEach(card => card.style.border = '1px solid rgba(0,102,255,0.2)');
+            } else {
+                document.querySelectorAll('.stat-card').forEach(card => card.style.border = 'none');
+            }
+        });
+    });
+
+    // Dark mode toggle
+    const toggleBtn = document.getElementById('darkModeToggle');
+    let isDark = false;
+    toggleBtn.addEventListener('click', () => {
+        if(isDark) {
+            document.documentElement.removeAttribute('data-theme');
+            toggleBtn.innerHTML = '🌙';
+        } else {
+            document.documentElement.setAttribute('data-theme', 'dark');
+            toggleBtn.innerHTML = '☀️';
+        }
+        isDark = !isDark;
+        // cập nhật lại màu biểu đồ cho phù hợp (recreate)
+        const currentData = getMarketData(currentIndex);
+        updateCharts(currentData);
+        if(yieldChart) { yieldChart.destroy(); initYieldCurve(); }
+        else initYieldCurve();
+    });
+
+    // Tự động refresh khối ngoại mỗi 6 giây
+    setInterval(() => {
+        const idx = currentIndex;
+        const data = getMarketData(idx);
+        const randomFlow = (Math.random() * 480 + 180).toFixed(1);
+        document.getElementById('foreignNet').innerHTML = `+ ${randomFlow} tỷ`;
+        // thay đổi nhẹ volume text (demo)
+        const newVol = (parseFloat(data.volume) + (Math.random() * 10 - 5)).toFixed(1);
+        document.getElementById('volumeText').innerHTML = `${newVol} triệu CP`;
+    }, 6000);
+
+    // KHỞI TẠO BAN ĐẦU
+    updateDashboard('vnindex');
+    initYieldCurve();
+
+    // Xử lý resize mượt
+    window.addEventListener('resize', () => {
+        if(priceChart) priceChart.resize();
+        if(volumeChart) volumeChart.resize();
+        if(yieldChart) yieldChart.resize();
+    });
+</script>
+</body>
+</html>
